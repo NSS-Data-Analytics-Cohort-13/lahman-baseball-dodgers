@@ -53,12 +53,18 @@ FROM appearances
 -- --ANS: Eddie Gaedel, 43, Boston Red Stockings
 -- --COMPUTATION: 31.106 
 
+
+/*De-duplicate Strategies:
+(1) Subquery + SELECT DISTINCT
+(2) Window Fxns
+*/
+
 --FINAL QUERY (3 TABLES JOIN):
 SELECT
 	p.height
 ,	CONCAT(namefirst, ' ', namelast) AS full_name
 ,	t.name
-, 	g_all
+, 	a.g_all
 FROM people as p
 	INNER JOIN appearances AS a
 		ON p.playerid = a.playerid
@@ -104,7 +110,8 @@ SELECT *
 FROM salaries;
 
 --INTIAL QUERY:
-WITH salary_list AS --CTE 1
+--**WHY CTE? pulling from collegeplaying and playerid to avoid astronomical salary calculations (repeat playerids, so duplicates will skew calculation)
+WITH salary_list AS --CTE 1 
 	(
 	SELECT
 		playerid
@@ -137,6 +144,7 @@ LIMIT 1;
 -- "David Price"	"$81,851,296.00"
 
 --SUBQUERY ALT ANS:
+--**WHY SUBQUERY? pulling from collegeplaying and playerid to avoid astronomical salary calculations (repeat playerids, so duplicates will skew calculation)
 SELECT namefirst
 	  , namelast
 	  , SUM(salary) as total_salary
@@ -160,28 +168,29 @@ SELECT namefirst
 SELECT *
 FROM fielding
 
---INITIAL QUERY:
+--REVISED QUERY:
 SELECT
-		CASE 
-		WHEN pos = 'OF' THEN 'Outfield'
-		WHEN pos IN ('SS','1B','2B', '3B') THEN 'Infield'
-		WHEN pos IN ('P','C') THEN 'Battery'
-		END AS position		
-,	COUNT(po) AS putouts_count
+	CASE 
+	WHEN pos = 'OF' THEN 'Outfield'
+	WHEN pos IN ('SS','1B','2B', '3B') THEN 'Infield'
+	WHEN pos IN ('P','C') THEN 'Battery'
+	END AS position		
+-- ,	COUNT(po) --not count but SUM**
+,	SUM(po) AS putouts_count
 FROM fielding
 WHERE yearid = '2016'
-GROUP BY position
+GROUP BY position;
 /* ANS:
-"Battery"	938
-"Infield"	661
-"Outfield"	354
+"Battery"	41424
+"Infield"	58934
+"Outfield"	29560
 */
 
 -- 5. Find the average number of strikeouts per game by decade since 1920. Round the numbers you report to 2 decimal places. Do the same for home runs per game. Do you see any trends?
 /*
 - teams, batting, or pitching post?
-- sum HR and HRA
-- sum SO and SOA
+- sum HR and HRA --> don't do bc it'd be "doubledipping" columns and throwing off calculation 
+- sum SO and SOA --> don't do bc it'd be "doubledipping" columns and throwing off calculation 
 - use numeric for more accuracy w/ decimals*
 */
 
@@ -194,32 +203,7 @@ FROM teams
 SELECT so
 from teams;
 
---INITIAL QUERY:
-SELECT
-	(yearid/10)*10 AS decade
-,	ROUND(AVG(SO+SOA), 2) AS avg_strikeouts_game
-,	ROUND(AVG(HR+HRA), 2) AS avg_homeruns_game
--- ,	ROUND(AVG(SO+SOA),2) OVER() AS avg_strikeouts --windows fxn
--- ,	ROUND(AVG(HR+HRA),2) OVER() AS avg_homeruns
-FROM teams
-WHERE yearid >= 1920
-GROUP BY 
-	decade
-ORDER BY
-	avg_strikeouts_game
-,	avg_homeruns_game
-
---
-SELECT
-		ROUND(AVG(so),2) AS avg_so
-	,	FLOOR(yearid/10)*10) AS decade
-	,	ROUND(AVG(batting.hr),2) AS avg_hr
-FROM batting
-WHERE yearid>1920
-GROUP BY decade
-ORDER by decade
-
---
+--REVISED QUERY:
 SELECT
 	FLOOR(yearid/10)*10 AS decade
 ,	ROUND(SUM(SO)/SUM(g)::numeric, 2) AS avg_strikeouts_game --numeric for precision
@@ -230,3 +214,147 @@ GROUP BY
 	decade
 ORDER BY
 	decade;
+--ANS: see table, 10 returns starting w/ 1920 - 2.81 - 0.40
+
+--INITIAL QUERY:
+-- SELECT
+-- 	(yearid/10)*10 AS decade
+-- ,	ROUND(AVG(SO+SOA), 2) AS avg_strikeouts_game
+-- ,	ROUND(AVG(HR+HRA), 2) AS avg_homeruns_game
+-- -- ,	ROUND(AVG(SO+SOA),2) OVER() AS avg_strikeouts --windows fxn
+-- -- ,	ROUND(AVG(HR+HRA),2) OVER() AS avg_homeruns
+-- FROM teams
+-- WHERE yearid >= 1920
+-- GROUP BY 
+-- 	decade
+-- ORDER BY
+-- 	avg_strikeouts_game
+-- ,	avg_homeruns_game
+-- 6. Find the player who had the most success stealing bases in 2016, where __success__ is measured as the percentage of stolen base attempts which are successful. (A stolen base attempt results either in a stolen base or being caught stealing.) Consider only players who attempted _at least_ 20 stolen bases.
+
+--REVISED QUERY:--
+WITH sb_attempts AS 
+	(
+    SELECT 
+        playerid
+	,
+        yearid
+     -- Classify each attempt as successful or unsuccessful w/ CASE & disregard <0 and NULL 			values
+    ,	SUM(CASE WHEN SB > 0 THEN SB ELSE 0 END) AS successful_attempts
+    ,	SUM(CASE WHEN CS > 0 THEN CS ELSE 0 END) AS unsuccessful_attempts
+    FROM batting
+    WHERE yearID = 2016
+    GROUP BY 
+		playerid
+	,	yearid
+	)
+SELECT --main query
+    p.playerid
+,	CONCAT(p.namefirst||' '||p.namelast)
+,   ROUND(successful_attempts * 1.00 / (successful_attempts + unsuccessful_attempts), 			3)*100::numeric || '%'  AS success_rate	
+FROM sb_attempts AS sb_a
+	INNER JOIN people AS p
+		ON sb_a.playerid = p.playerid
+WHERE 
+	(successful_attempts + unsuccessful_attempts) >= 20
+	AND yearID = 2016
+ORDER BY success_rate DESC
+LIMIT 1;
+--ANS: Chris Owings, 91.3%
+
+---ALT QUERY (shorter and quicker computation)--
+SELECT ROUND((CAST(sb AS NUMERIC) / (CAST(sb+cs AS NUMERIC))),3) *100 || '%' AS percentage_success
+	,	CONCAT(namefirst,' ',namelast) AS full_name
+	, 	yearid
+	--,	sb
+	--,	cs
+FROM batting
+	inner join people
+		USING(playerid)
+WHERE yearid=2016 AND sb+cs>=20
+ORDER BY percentage_success DESC
+
+/*
+- batting --> connect via appearances and people tables
+- SB, CS
+- FILTER: yearid = '2016'
+- FILTER: CASE WHEN or WHERE subquery for SB+CS
+- FILTER: Nulls
+*/
+
+--EXPLORATION:
+SELECT *
+FROM teams
+
+SELECT --2835 records, lots of nulls for both columns --sb, cs = integer
+	sb
+,	cs 
+,	teamid
+FROM teams
+WHERE 
+	sb IS NOT NULL AND cs IS NOT NULL
+	AND yearid = '2016'
+ORDER BY sb, cs
+
+SELECT *
+FROM batting
+
+--**USE BATTING TABLE--
+SELECT  --102816 records, nulls
+	playerid
+,	sb
+,	cs
+FROM batting
+WHERE 
+	-- sb IS NOT NULL AND cs IS NOT NULL AND 
+	yearid = '2016'
+ORDER BY sb, cs
+
+SELECT sb, cs --136815 records, mostly nulls
+FROM fielding
+
+-- --INTIIAL QUERY
+-- WITH sb_attempts AS
+-- 	(
+-- 	SELECT 
+-- 			CASE WHEN t.
+-- 		THEN 'Successful'
+-- 		WHEN t.
+-- 		THEN 'Unsuccessful'
+-- ,		END AS attempt_status
+-- 	FROM teams
+	
+-- 	)
+
+-- SELECT --Main Query
+-- 	DISTINCT playerid
+-- ,	DISTINCT teamid
+-- FROM teams AS t
+-- 	INNER JOIN appearances AS a
+-- 		ON t.teamid = a.teamid
+-- 	INNER JOIN people AS p
+-- 		ON a.playerid = p.playerid
+-- WHERE 
+-- 	t.yearid = '2016'
+-- 	AND 
+-- 	>= 20
+
+-- 7.  From 1970 – 2016, what is the largest number of wins for a team that did not win the world series? What is the smallest number of wins for a team that did win the world series? Doing this will probably result in an unusually small number of wins for a world series champion – determine why this is the case. Then redo your query, excluding the problem year. How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? What percentage of the time?
+/*
+--Hidden date/year: 2 total (just need one)
+*/
+
+-- 8. Using the attendance figures from the homegames table, find the teams and parks which had the top 5 average attendance per game in 2016 (where average attendance is defined as total attendance divided by number of games). Only consider parks where there were at least 10 games played. Report the park name, team name, and average attendance. Repeat for the lowest 5 average attendance.
+/*
+
+*/
+
+-- 9. Which managers have won the TSN Manager of the Year award in both the National League (NL) and the American League (AL)? Give their full name and the teams that they were managing when they won the award.
+/*
+
+*/
+
+-- 10. Find all players who hit their career highest number of home runs in 2016. Consider only players who have played in the league for at least 10 years, and who hit at least one home run in 2016. Report the players' first and last names and the number of home runs they hit in 2016.
+/*
+
+*/
