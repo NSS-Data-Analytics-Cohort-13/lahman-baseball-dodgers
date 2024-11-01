@@ -70,9 +70,6 @@ GROUP BY ---OR can use positions_played to refer to the case statement
 		WHEN pos IN ('P','C') THEN 'Battery'
 		END;
 
-
-
-
 --5. Find the average number of strikeouts per game by decade since 1920. Round the numbers you report to 2 decimal places. Do the same for home runs per game. Do you see any trends?
 
  ---Converting the round functions to numeric BECAUSE, interger isnt as precise and we want to ensure that we're pulling the actual numbers (will round down if not used/ can test out by removing numeric to see difference) initially wanted to use AVG function, but need to divide strikeouts by games (g) THEN round to nearest 2nd decimal
@@ -90,7 +87,7 @@ ORDER BY decade;
 
 SELECT 
 		CONCAT(p.namefirst,' ',p.namelast) as name
-	,	round(SUM(b.sb)*1.0/ --*1.0 is for percentage
+	,	round(SUM(b.sb)*1.0/ --*1.0 converting data type, sb is whole number, converting into decimal so that we are not rounding the percentage to nearest whole number. Makes it a 'float unit'
 	(SUM(b.sb)+SUM(b.cs))*100,2) as Percentage --*100 for percentage
 
 FROM batting as b
@@ -100,7 +97,7 @@ WHERE yearid = 2016
 
 AND p.playerid IS NOT NULL
 GROUP BY CONCAT(p.namefirst,' ',p.namelast)
-HAVING SUM(b.sb)+SUM(b.cs) >= 20
+HAVING SUM(b.sb)+SUM(b.cs) >= 20 --helps not create CTE
 ORDER BY percentage DESC
 
 --7.  From 1970 – 2016, what is the largest number of wins for a team that did not win the world series? What is the smallest number of wins for a team that did win the world series? Doing this will probably result in an unusually small number of wins for a world series champion – determine why this is the case. Then redo your query, excluding the problem year. How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? What percentage of the time?
@@ -116,7 +113,7 @@ FROM teams
 WHERE yearid BETWEEN 1970 AND 2016 and wswin = 'Y'
 ORDER BY w
 
---7C --Player strike in 1981, not as many games
+--7C --Player strike in 1981, not as many games. Took 1981 out of query to see how results change
 SELECT w,yearid,teamid,wswin
 FROM teams
 WHERE yearid BETWEEN 1970 AND 2016 and wswin = 'Y' AND yearid <> 1981
@@ -124,26 +121,18 @@ ORDER BY w
 
 
 --Finding percentage
-with max_wins as
-	(SELECT MAX(w)as max_wins,yearid
-	from teams
-	WHERE yearid BETWEEN 1970 and 2016  and yearid <> 1981
-	group by yearid)
-select --t.yearid
-	-- ,t.w
-	-- ,t.wswin
-	-- ,t.teamid
-	ROUND(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(count(*),0),0) AS PERCENTAGE
+WITH max_wins AS
+	(SELECT MAX(w)AS max_wins,yearid
+	FROM teams
+	WHERE yearid BETWEEN 1970 and 2016 AND yearid <> 1981
+	GROUP BY yearid)
+SELECT 
+	ROUND(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(count(DISTINCT t.yearid),0),2) AS PERCENTAGE  --make sure to use DISTINCT because of duplicate years present
 	
-	--(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) AS wswin_percentage
-	       -- (SUM(CASE WHEN t.wswin='Y' THEN 1 ELSE 0 END)/
-	-- NULLIF (SUM(CASE WHEN t.wswin='N' THEN 1 ELSE 0 END)*100)) as percentage
-from teams as t
- join max_wins as mw
-on t.yearid=mw.yearid AND t.w=mw.max_wins
-WHERE wswin IN ('Y','N')
-    --t.yearid BETWEEN 1970 AND 2016 AND t.yearid <> 1981
---GROUP BY 1,2,3,4
+FROM teams AS t
+INNER JOIN max_wins as mw
+ON t.yearid=mw.yearid AND t.w=mw.max_wins
+WHERE wswin IN ('Y','N') ---filters out null values, because null value is neither Y OR N
 
 
 --8. Using the attendance figures from the homegames table, find the teams and parks which had the top 5 average attendance per game in 2016 (where average attendance is defined as total attendance divided by number of games). Only consider parks where there were at least 10 games played. Report the park name, team name, and average attendance. Repeat for the lowest 5 average attendance.
@@ -151,15 +140,16 @@ WHERE wswin IN ('Y','N')
 SELECT team, park, attendance  --checking columns
 FROM homegames
 
-
-
-SELECT attendance/games AS average_attendance, 
-park AS park_name ,
-team AS team_name
-FROM homegames
+SELECT hg.attendance/games AS average_attendance, 
+park_name , name AS team_name---want the actual name of the park
+FROM homegames AS hg
+INNER JOIN parks
+USING (park)
+INNER JOIN teams
+ON hg.team=teams.teamid AND teams.yearid=hg.year --can join on tables with different column name IF data is the same (teamid and team, year and yearid)
 WHERE year = 2016 AND games >= 10
 ORDER BY average_attendance DESC --remove DESC for lowest attendance for last part of question
-LIMIT 5;
+--LIMIT 5;
 
 --9. Which managers have won the TSN Manager of the Year award in both the National League (NL) and the American League (AL)? Give their full name and the teams that they were managing when they won the award.
 
@@ -225,12 +215,12 @@ SELECT CONCAT(p.namefirst, ' ', p.namelast) AS name,
 	INNER JOIN batting AS batt
 	ON p.playerid = batt.playerid
 	INNER JOIN ( --joining subquery back into main query
-    SELECT playerid, MAX(hr) AS max_hr  ------ Subquery to find each player's career-high home run count, want to join people and batting to specific subquery that i'm making, referring to that as career_duration
+    SELECT playerid, MAX(hr) AS max_hr  ------ Subquery to find each player's career-high home run count, want to join people and batting to specific subquery that i'm making, referring to that as career_high
     FROM batting AS batt
     GROUP BY playerid
 ) AS career_high 
 ON p.playerid = career_high.playerid  ---- Subquery to count years a player appeared in the league
-JOIN (--creating second "table" to join in on, referred to as career_duration
+INNER JOIN (--creating second "table" to join in on, referred to as career_duration
     SELECT playerid, COUNT(DISTINCT yearid) AS years_played --counting the number of years player was apart of a team
     FROM batting
     GROUP BY playerid
@@ -238,7 +228,7 @@ JOIN (--creating second "table" to join in on, referred to as career_duration
 ON p.playerid = career_duration.playerid 
 WHERE batt.yearid = 2016
   AND batt.hr > 0
-  AND batt.hr = career_high.max_hr
-  AND career_duration.years_played >= 10;
-
+  AND batt.hr = career_high.max_hr --refer back here to the subquery created previously. Homeruns equals career high (subquery) max homeruns
+  AND career_duration.years_played >= 10
+ORDER BY home_runs_2016
 
