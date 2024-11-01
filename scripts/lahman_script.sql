@@ -230,6 +230,7 @@ ORDER BY
 -- ORDER BY
 -- 	avg_strikeouts_game
 -- ,	avg_homeruns_game
+
 -- 6. Find the player who had the most success stealing bases in 2016, where __success__ is measured as the percentage of stolen base attempts which are successful. (A stolen base attempt results either in a stolen base or being caught stealing.) Consider only players who attempted _at least_ 20 stolen bases.
 
 --REVISED QUERY:--
@@ -251,6 +252,7 @@ WITH sb_attempts AS
 SELECT --main query
     p.playerid
 ,	(p.namefirst||' '||p.namelast) AS full_name
+		--multiply by 1.0 to make the data type into floating, so it isn't just a whole number after dividing
 ,   ROUND(successful_attempts * 1.00 / (successful_attempts + unsuccessful_attempts), 3)*100::numeric || '%'  AS success_rate	
 FROM sb_attempts AS sb_a
 	INNER JOIN people AS p
@@ -359,7 +361,7 @@ FROM fielding
 -- 7.  From 1970 – 2016, what is the largest number of wins for a team that did not win the world series? What is the smallest number of wins for a team that did win the world series? Doing this will probably result in an unusually small number of wins for a world series champion – determine why this is the case. Then redo your query, excluding the problem year. How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? What percentage of the time?
 
 /*
---Hidden date/year: 2 total (just need one)**
+--Hidden date/year: 2 total (1981 and 1994)** 
 - WS lose DESC vs. win ASC
 - 1st query >> filter: yearid BETWEEN 1970 and 2016
 - 2nd query >> no year filter, COUNT(w), COUNT(WSWin)
@@ -439,72 +441,72 @@ SELECT
     wswin
 FROM teams
 WHERE wswin = 'Y'
-    AND yearID BETWEEN 1872 AND 2016 
+    AND yearID BETWEEN 1872 AND 2016 --1981 bc of player strike
 ORDER BY w ASC 
 LIMIT 10;       
 
 
---CTE for maximum wins by a non-champion and minimum wins by a champion
-WITH max_min_wins AS (
-    SELECT
-        CASE 
-            WHEN wswin = 'N' THEN MAX(w) --116
-            WHEN wswin = 'Y' THEN MIN(w) --63
-        	END AS win_count
-		,	wswin
-    FROM teams
-    WHERE 
-		yearID BETWEEN 1970 AND 2016
-		AND wswin IS NOT NULL
-		AND w IS NOT NULL
-    GROUP BY wswin 
-),
+-- --CTE for maximum wins by a non-champion and minimum wins by a champion
+-- WITH max_min_wins AS (
+--     SELECT
+--         CASE 
+--             WHEN wswin = 'N' THEN MAX(w) --116
+--             WHEN wswin = 'Y' THEN MIN(w) --63
+--         	END AS win_count
+-- 		,	wswin
+--     FROM teams
+--     WHERE 
+-- 		yearID BETWEEN 1970 AND 2016
+-- 		AND wswin IS NOT NULL
+-- 		AND w IS NOT NULL
+--     GROUP BY wswin 
+-- ),
 
--- CTE to rank teams by wins for each year and check if top-win team won WS
-yearly_top_teams AS (
-    SELECT
-        yearID
-		,
-        teamID
-		,
-        w
-		,
-        wswin
-		,
-        RANK() OVER (PARTITION BY yearID ORDER BY w DESC) AS win_rank
-    FROM teams
-    WHERE 
-		yearID BETWEEN 1970 AND 2016
-		AND wswin IS NOT NULL
-		AND w IS NOT NULL
-)
+-- -- CTE to rank teams by wins for each year and check if top-win team won WS
+-- yearly_top_teams AS (
+--     SELECT
+--         yearID
+-- 		,
+--         teamID
+-- 		,
+--         w
+-- 		,
+--         wswin
+-- 		,
+--         RANK() OVER (PARTITION BY yearID ORDER BY w DESC) AS win_rank
+--     FROM teams
+--     WHERE 
+-- 		yearID BETWEEN 1970 AND 2016
+-- 		AND wswin IS NOT NULL
+-- 		AND w IS NOT NULL
+-- )
 
--- Main query to select distinct teamID, win counts, and frequency calculation
-SELECT 
-    DISTINCT teamID,
-    yearID,
-    w,
-    wswin,
+-- -- Main query to select distinct teamID, win counts, and frequency calculation
+-- SELECT 
+--     DISTINCT teamID,
+--     yearID,
+--     w,
+--     wswin,
     
-    -- Bring in the largest wins for non-champions and smallest wins for champions
-    (SELECT win_count FROM max_min_wins WHERE wswin = 'N') AS largest_win_non_champion,
-    (SELECT win_count FROM max_min_wins WHERE wswin = 'Y') AS smallest_win_champion,
+--     -- Bring in the largest wins for non-champions and smallest wins for champions
+--     (SELECT win_count FROM max_min_wins WHERE wswin = 'N') AS largest_win_non_champion,
+--     (SELECT win_count FROM max_min_wins WHERE wswin = 'Y') AS smallest_win_champion,
 
-    -- Calculate frequency and percentage of top-win teams winning the World Series
-    (SELECT COUNT(DISTINCT teamID) FROM yearly_top_teams WHERE win_rank = 1 AND wswin = 'Y') AS top_win_champions,
-    (SELECT COUNT(DISTINCT teamID) FROM yearly_top_teams WHERE win_rank = 1) AS total_top_win_teams,
-    (SELECT COUNT(DISTINCT teamID) * 100.0 / NULLIF((SELECT COUNT(DISTINCT teamID) FROM yearly_top_teams WHERE win_rank = 1), 0)
-     FROM yearly_top_teams WHERE win_rank = 1 AND wswin = 'Y') AS percent_top_win_champions
+--     -- Calculate frequency and percentage of top-win teams winning the World Series
+--     (SELECT COUNT(DISTINCT teamID) FROM yearly_top_teams WHERE win_rank = 1 AND wswin = 'Y') AS top_win_champions,
+--     (SELECT COUNT(DISTINCT teamID) FROM yearly_top_teams WHERE win_rank = 1) AS total_top_win_teams,
+--     (SELECT COUNT(DISTINCT teamID) * 100.0 / NULLIF((SELECT COUNT(DISTINCT teamID) FROM yearly_top_teams WHERE win_rank = 1), 0)
+--      FROM yearly_top_teams WHERE win_rank = 1 AND wswin = 'Y') AS percent_top_win_champions
 
-FROM teams
-WHERE 
-	yearID BETWEEN 1970 AND 2016
-	AND wswin IS NOT NULL
-	AND w IS NOT NULL
-	AND yearID <> 1981
-ORDER BY yearID;
+-- FROM teams
+-- WHERE 
+-- 	yearID BETWEEN 1970 AND 2016
+-- 	AND wswin IS NOT NULL
+-- 	AND w IS NOT NULL
+-- 	AND yearID <> 1981
+-- ORDER BY yearID;
 
----PHILIP'S QUERY---
+----PHILIP'S QUERY----
 with max_wins as
 	(SELECT MAX(w)as max_wins,yearid
 	from teams
@@ -514,7 +516,7 @@ select --t.yearid
 	-- ,t.w
 	-- ,t.wswin
 	-- ,t.teamid
-	ROUND(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(count(*),0),0) AS PERCENTAGE
+	ROUND(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(count(DISTINCT t.yearid),0),2) AS PERCENTAGE --should be 12 wswins/45 seasons
 	
 	--(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) AS wswin_percentage
 	       -- (SUM(CASE WHEN t.wswin='Y' THEN 1 ELSE 0 END)/
@@ -528,42 +530,26 @@ WHERE wswin IN ('Y','N')
 
 
 -----ALT QUERY----
-WITH  wins_yes AS (SELECT yearid, g,
-				max(w) AS max_wins_y
-				FROM teams
-				WHERE wswin='Y' AND yearid>=1970
-				GROUP BY yearid,g)
-				
-,     wins_min_yes AS (SELECT yearid, g,
-				min(w) AS min_wins_y
-				FROM teams
-				WHERE wswin='Y' AND yearid>=1970
-				GROUP BY yearid,g)
-,         max_wins_no AS (SELECT  yearid,g,
-				max(w) AS max_wins_n
-				FROM teams
-				WHERE wswin='N' AND yearid>=1970
-				GROUP BY yearid,g)
-,			most_win_yes_count AS (SELECT yearid, g,
-							COUNT(CASE WHEN yearid>=1970 AND wswin='Y' THEN 'winner' END) AS count_win
-							FROM teams
-							WHERE yearid>=1970 AND wswin='Y'
-							GROUP BY yearid,g)
-SELECT
-		--COUNT(CAST(wins_yes.g AS NUMERIC) --AS total_games
-		MAX(max_wins_y)
-	 ,	 MIN(min_wins_y)
-	 ,	 MAX(max_wins_n)
-	 ,	COUNT(count_win)/COUNT(*) AS percent_winner
-	--,	COUNT(CASE WHEN count_win IS NOT NULL THEN 'count win' END)*100/total_games AS percent_winner
-	--,	COUNT(CASE WHEN countwin.yearid>=1970 AND wswin='Y' THEN 'winner' END)*100/COUNT(*) AS percent_winner
-FROM wins_yes--, wins_min_yes, max_wins_no, most_win_yes_count
-	INNER JOIN wins_min_yes
-	 	USING(yearid)
-	 		INNER JOIN max_wins_no
-	 			USING(yearid)
-	 				INNER JOIN most_win_yes_count
-						USING(yearid)
+WITH max_wins_w AS (SELECT
+					yearid, MAX(w) AS m_w
+					FROM teams
+					WHERE yearid>= 1970 AND wswin='Y'
+					GROUP BY yearid)
+,	max_wins_l AS (SELECT
+					yearid, MAX(w) AS m_w
+					FROM teams
+					WHERE yearid>= 1970 AND wswin='N'
+					GROUP BY yearid)
+SELECT --yearid
+	--,	m.m_w AS most_win_ws_winner
+	--,	m_l.m_w AS most_win_ws_loser
+		--COUNT(CASE WHEN m.m_w >= m_l.m_w THEN 'max win win' END),
+		SUM(CASE WHEN m.m_w >= m_l.m_w THEN 1 ELSE 0 END) AS sum_max_winner,
+		(SUM(CASE WHEN m.m_w >= m_l.m_w THEN 1 ELSE 0 END)*1.0/COUNT(*)) *100 AS percentage
+FROM max_wins_w AS m
+	INNER JOIN max_wins_l m_l
+		USING(yearid)
+WHERE m.yearid !=1981
 -- GROUP BY  max_wins_y
 -- 	 ,	 min_wins_y
 -- 	 ,	 max_wins_n
@@ -588,14 +574,29 @@ LIMIT 5;
 
 --LOWEST 5 ATTENDANCE:--
 SELECT
-	park
-,	team
-,	attendance/games AS avg_attendance
-FROM homegames
-WHERE year = 2016
+	park_name
+,	t.name AS team_name
+,	h.attendance/games AS avg_attendance
+FROM homegames AS h
+	INNER JOIN parks AS p
+		ON h.park = p.park
+	INNER JOIN teams AS t
+		ON h.team = t.teamid
+		AND h.year = t.yearid
+WHERE 
+	year = 2016
+	AND	games >= 10
 ORDER BY
 	avg_attendance 
 LIMIT 5;
+
+/* ANSWER:
+"Tropicana Field"	"Tampa Bay Rays"	15878
+"Oakland-Alameda County Coliseum"	"Oakland Athletics"	18784
+"Progressive Field"	"Cleveland Indians"	19650
+"Marlins Park"	"Miami Marlins"	21405
+"U.S. Cellular Field"	"Chicago White Sox"	21559
+*/
 
 -- 9. Which managers have won the TSN Manager of the Year award in both the National League (NL) and the American League (AL)? Give their full name and the teams that they were managing when they won the award.
 /*
@@ -616,7 +617,7 @@ FROM awardsmanagers
 SELECT
 	m.playerid
 ,	teamid
-,	m.yearid
+,	m.yearid AS al_year
 FROM awardsmanagers AS am
 	INNER JOIN managers AS m
 		ON am.playerid = m.playerid
@@ -629,7 +630,7 @@ WHERE
 SELECT
 	m.playerid
 ,	teamid
-,	m.yearid
+,	m.yearid AS nl_year
 FROM awardsmanagers AS am
 	INNER JOIN managers AS m
 		ON am.playerid = m.playerid
@@ -639,6 +640,7 @@ WHERE
 	AND am.lgid = 'NL'
 
 --USE ABOVE QUERIES FOR CTE AND MAIN QUERY:--
+--Could also select lgid from awardsmanagers table**
 WITH al_awards as
       (SELECT playerid,teamid as alteam, yearid as al_year
        FROM awardsmanagers
@@ -652,7 +654,8 @@ WITH al_awards as
     INNER JOIN managers
     USING (playerid, yearid)
     WHERE awardid = 'TSN Manager of the Year' AND awardsmanagers.lgid = 'NL')
-    SELECT namefirst
+    SELECT 
+	  namefirst
 	, namelast
 	, al_year
 	, nl_year
@@ -730,5 +733,5 @@ WHERE b.yearid = 2016
 	AND career_years.years_played >= 10
 	AND b.hr = max_homerun.max_hr
 	AND b.hr >0
--- ORDER BY 
--- 	b.hr DESC
+ORDER BY
+	b.hr DESC
