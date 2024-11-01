@@ -117,6 +117,7 @@ AND p.playerid IS NOT NULL
 GROUP BY CONCAT(p.namefirst,' ',p.namelast)
 HAVING SUM(b.sb)+SUM(b.cs) >= 20
 ORDER BY percentage DESC
+LIMIT 1;
 
 
 
@@ -160,8 +161,8 @@ SELECT --t.yearid
 	-- ,t.w
 	-- ,t.wswin
 	-- ,t.teamid
-	ROUND(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(count(*),0),0) AS PERCENTAGE
-	
+	-- ROUND(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(COUNT (DISTINCT t.yearid)),0),2) AS PERCENTAGE
+	COUNT (DISTINCT t.yearid)
 	--(COUNT(CASE WHEN t.wswin = 'Y' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) AS wswin_percentage
 	       -- (SUM(CASE WHEN t.wswin='Y' THEN 1 ELSE 0 END)/
 	-- NULLIF (SUM(CASE WHEN t.wswin='N' THEN 1 ELSE 0 END)*100)) as percentage
@@ -183,22 +184,36 @@ WHERE wswin IN ('Y','N')
 	-- team name, and average attendance. 
     -- Repeat for the lowest 5 average attendance.
 	
-	SELECT team, park, attendance
-	FROM homegames
+
 
 	SELECT *
 	FROM teams
 
+	
+	SELECT team, park, attendance
+	FROM homegames
 
-   SELECT *
-   FROM parks
-
--- Question 8
+ 
 
    SELECT park as park_name
    , team as teams_name
    , attendance/games as average_attendance
    FROM homegames 
+
+
+
+   
+
+-- Question 8
+
+   SELECT p.park_name
+   , t.name as teams_name
+   , h.attendance/games as average_attendance
+   FROM homegames AS h
+   JOIN parks AS p
+   ON h.park = p.park
+   JOIN teams as t
+   ON t.teamid = h.team AND t.yearid = h.year
    WHERE year = 2016 AND games >= 10
    ORDER BY average_attendance DESC
    LIMIT 5;
@@ -312,21 +327,21 @@ JOIN
 WHERE b.yearid = 2016
 	AND career_years.years_played >= 10
 	AND b.hr = max_homerun.max_hr
-	AND b.hr >0
+	AND b.hr >0 
 
    
    
-  SELECT
-	playerid
-,	yearid
-,	SUM(hr) AS total_hr
-FROM batting
-WHERE yearid = 2016 and HR >= 1
-GROUP BY 
-	playerid
-,	yearid
-ORDER BY 
-	total_hr DESC
+--   SELECT
+-- 	playerid
+-- ,	yearid
+-- ,	SUM(hr) AS total_hr
+-- FROM batting
+-- WHERE yearid = 2016 and HR >= 1
+-- GROUP BY 
+-- 	playerid
+-- ,	yearid
+-- ORDER BY 
+-- 	total_hr DESC
   
 
 
