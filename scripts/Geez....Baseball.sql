@@ -316,7 +316,7 @@ WHERE b2016.yearid = 2016
   AND b2016.hr = career_high.max_hr
   AND career_duration.years_played >= 10;
 
-
+--10 final answer!
 SELECT CONCAT(namefirst,' ',namelast) as name, b.hr
 from people as p
 join batting as b
